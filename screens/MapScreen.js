@@ -1,77 +1,94 @@
-import React from "react";
-import { View, Text, StyleSheet } from "react-native";
-import { WebView } from "react-native-webview";
+import React, {
+  useContext,
+} from "react";
 
-export default function MapScreen({ currentLocation, alerts }) {
+import {
+  View,
+  StyleSheet,
+  Text,
+} from "react-native";
+
+import { MapView, Camera, PointAnnotation } from "@maplibre/maplibre-react-native";
+
+import { AlertsContext } from "../context/AlertsContext";
+
+export default function MapScreen({
+  currentLocation,
+}) {
+
+  const {
+    alerts,
+  } = useContext(AlertsContext);
+
   if (!currentLocation) {
+
     return (
       <View style={styles.center}>
-        <Text style={styles.text}>Get Location First</Text>
+
+        <Text style={styles.text}>
+          Get Location First
+        </Text>
+
       </View>
     );
   }
 
-  const markers = alerts
-    .map(
-      (item) => `
-      L.marker([${item.latitude}, ${item.longitude}])
-        .addTo(map)
-        .bindPopup("SOS Alert - ${item.distance} km away");
-    `
-    )
-    .join("");
+  return (
+    <View style={styles.container}>
+      <MapView
+        style={styles.map}
+        mapStyle="https://demotiles.maplibre.org/style.json"
+        >
+          <Camera
+            zoomLevel={14}
+            centerCoordinate={[
+              currentLocation.longitude,
+              currentLocation.latitude,
+            ]}
+          />
 
-  const html = `
-  <!DOCTYPE html>
-  <html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet"
-      href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <style>
-      html, body, #map {
-        margin:0;
-        padding:0;
-        height:100%;
-        width:100%;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="map"></div>
+          <PointAnnotation
+            id="user-location"
+            coordinate={[
+              currentLocation.longitude,
+              currentLocation.latitude,
+            ]}
+          />
 
-    <script>
-      var map = L.map('map').setView(
-        [${currentLocation.latitude}, ${currentLocation.longitude}],
-        14
-      );
-
-      L.tileLayer(
-        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        { maxZoom: 19 }
-      ).addTo(map);
-
-      L.marker([${currentLocation.latitude}, ${currentLocation.longitude}])
-        .addTo(map)
-        .bindPopup("You are here");
-
-      ${markers}
-    </script>
-  </body>
-  </html>
-  `;
-
-  return <WebView source={{ html }} style={{ flex: 1 }} />;
+          {alerts.map((alert) => (
+            <PointAnnotation
+              key={index}
+              id={`alert-${index}`}
+              coordinate={[
+                Number(item.longitude),
+                Number(item.latitude),
+              ]}
+            />
+          ))}
+      </MapView>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "black",
+  },
+
+  map: {
+    flex: 1,
+  },
+
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "black",
   },
+
   text: {
+    color: "white",
     fontSize: 18,
   },
 });

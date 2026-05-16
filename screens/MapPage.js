@@ -49,7 +49,7 @@ export default function MapPage() {
         }
       )
       .subscribe();
-  }
+  };
 
   return (
     <SafeAreaView style={styles.container}>

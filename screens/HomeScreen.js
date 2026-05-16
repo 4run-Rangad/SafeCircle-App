@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { View,Text,StyleSheet, TouchableOpacity, Alert } from "react-native";
-import { SafeAreaView } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import SOSButton from "../components/SOSButton";
 import { getContacts } from "../utils/contacts";
 import { registerForPushNotifications } from "../utils/notifications";
@@ -9,12 +9,16 @@ import { supabase } from "../services/supabase";
 import { getDistance } from "../utils/distance";
 import * as Notifications from "expo-notifications";
 
+import { AlertsContext } from "../context/AlertsContext";
+
 export default function HomeScreen(){
     const [location, setLocation] = useState(null);
-    const [alerts, setAlerts] = useState([]);
+    
     const [currentUser, setCurrentUser] = useState(null);
     const [contacts, setContacts] = useState([]);
     const [selectedNumbers, setSelectedNumbers] = useState([]);
+
+    const { alerts, setAlerts } = useContext(AlertsContext);
     //Get Logged user
     useEffect(() => {
         loadUser();
@@ -119,9 +123,15 @@ export default function HomeScreen(){
                 table: "sos_alerts",
             },
             (payload) => {
-                if(!location) return;
+                if(!location || !currentUser) return;
 
-                const alertData = payload.new;
+                const alertData = payload?.new;
+                if(!alertData) {
+                  console.log("Invalid payload:");
+                  return;
+                }
+
+                if(alertData.user_id === currentUser.id) return;
 
                 const distance = getDistance(
                     location.latitude,
@@ -131,8 +141,7 @@ export default function HomeScreen(){
                 );
 
                 console.log("Distance: ", distance);
-                //ignore own alert
-                if(alertData.user_id === currentUser.id) return;
+              
                 if(distance <= 5){
                     setAlerts((prev) => [
                         {

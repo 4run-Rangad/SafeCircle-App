@@ -9,6 +9,8 @@ import MainTabs from "./MainTabs";
 import * as Notifications from "expo-notifications";
 import { supabase } from "./services/supabase";
 
+import { AlertsProvider } from "./context/AlertsContext";
+
 const Stack = createNativeStackNavigator();
 
 Notifications.setNotificationHandler({
@@ -51,18 +53,20 @@ export default function App(){
   if(loading) return null;
 
   return( 
-   <NavigationContainer>
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {session ? (
-        <Stack.Screen name="MainTabs" component={MainTabs} />
-      ) : (
-        <>
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Register" component={RegisterScreen} />
-        </>
-      )}
-    </Stack.Navigator>
-   </NavigationContainer>
+    <AlertsProvider>
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          {session ? (
+            <Stack.Screen name="MainTabs" component={MainTabs} />
+          ) : (
+            <>
+              <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="Register" component={RegisterScreen} />
+            </>
+          )}
+        </Stack.Navigator>
+      </NavigationContainer>
+    </AlertsProvider>
   );
 }
 
