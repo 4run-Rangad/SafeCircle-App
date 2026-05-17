@@ -8,17 +8,23 @@ import { getUserLocation } from "../utils/location";
 import { supabase } from "../services/supabase";
 import { getDistance } from "../utils/distance";
 import * as Notifications from "expo-notifications";
+import * as Location from "expo-location";
 
 import { AlertsContext } from "../context/AlertsContext";
 
 export default function HomeScreen(){
-    const [location, setLocation] = useState(null);
-    
-    const [currentUser, setCurrentUser] = useState(null);
     const [contacts, setContacts] = useState([]);
     const [selectedNumbers, setSelectedNumbers] = useState([]);
 
-    const { alerts, setAlerts } = useContext(AlertsContext);
+    const { 
+      alerts,
+      
+      location,
+      setLocation,
+
+      currentUser,
+      setCurrentUser,
+     } = useContext(AlertsContext);
     //Get Logged user
     useEffect(() => {
         loadUser();
@@ -33,12 +39,7 @@ export default function HomeScreen(){
         }
     }, [currentUser]);
 
-    useEffect(() =>{
-        if(location && currentUser){
-            const unsubscribe = listenForSOS();
-            return unsubscribe;
-        }
-    }, [location, currentUser]);
+    
 
     const loadUser = async () => {
         const { data: { user }} = await supabase.auth.getUser();
@@ -103,61 +104,109 @@ export default function HomeScreen(){
         return user.id;
     }
 
+  const startLiveTracking = async () => {
+
+    const { status } =
+      await Location.requestForegroundPermissionsAsync();
+
+    if (status !== "granted") {
+
+      Alert.alert(
+        "Location permission denied"
+      );
+
+      return;
+    }
+
+    await Location.watchPositionAsync(
+      {
+        accuracy:
+          Location.Accuracy.High,
+
+        timeInterval: 5000,
+
+        distanceInterval: 10,
+      },
+
+      async (position) => {
+
+        const coords = {
+          latitude:
+            position.coords.latitude,
+
+          longitude:
+            position.coords.longitude,
+        };
+
+        setLocation(coords);
+
+        await saveUser(coords);
+
+        console.log(
+          "Live Location:",
+          coords
+        );
+      }
+  );
+};
 
 
-    //Get Location
-    const handleGetLocation = async () => {
-        const coords = await getUserLocation();
-        if (coords) setLocation(coords);
 
-        const userId = await saveUser(coords);
-        console.log("User ID:", userId);
-    };
 
-    const listenForSOS = () => {
-        supabase.channel("nearby_sos").on(
-            "postgres_changes",
-            {
-                event: "INSERT",
-                schema: "public",
-                table: "sos_alerts",
-            },
-            (payload) => {
-                if(!location || !currentUser) return;
 
-                const alertData = payload?.new;
-                if(!alertData) {
-                  console.log("Invalid payload:");
-                  return;
-                }
+    // //Get Location
+    // const handleGetLocation = async () => {
+    //     const coords = await getUserLocation();
+    //     if (coords) setLocation(coords);
 
-                if(alertData.user_id === currentUser.id) return;
+    //     const userId = await saveUser(coords);
+    //     console.log("User ID:", userId);
+    // };
 
-                const distance = getDistance(
-                    location.latitude,
-                    location.longitude,
-                    alertData.latitude,
-                    alertData.longitude
-                );
+    // const listenForSOS = () => {
+    //     supabase.channel("nearby_sos").on(
+    //         "postgres_changes",
+    //         {
+    //             event: "INSERT",
+    //             schema: "public",
+    //             table: "sos_alerts",
+    //         },
+    //         (payload) => {
+    //             if(!location || !currentUser) return;
 
-                console.log("Distance: ", distance);
+    //             const alertData = payload?.new;
+    //             if(!alertData) {
+    //               console.log("Invalid payload:");
+    //               return;
+    //             }
+
+    //             if(alertData.user_id === currentUser.id) return;
+
+    //             const distance = getDistance(
+    //                 location.latitude,
+    //                 location.longitude,
+    //                 alertData.latitude,
+    //                 alertData.longitude
+    //             );
+
+    //             console.log("Distance: ", distance);
               
-                if(distance <= 5){
-                    setAlerts((prev) => [
-                        {
-                            ...alertData,
-                            distance: distance.toFixed(2),
-                        }, ...prev,
-                    ]);
+    //             if(distance <= 5){
+    //                 setAlerts((prev) => [
+    //                     {
+    //                         ...alertData,
+    //                         distance: distance.toFixed(2),
+    //                     }, ...prev,
+    //                 ]);
 
-                    Alert.alert("Nearby SOS alert", `${distance.toFixed(2)} km away`);
-                }
+    //                 Alert.alert("Nearby SOS alert", `${distance.toFixed(2)} km away`);
+    //             }
                 
 
-            }
-        )
-        .subscribe();
-    };
+    //         }
+    //     )
+    //     .subscribe();
+    // };
 
     //load Contacts
     const loadContacts = async () => {
@@ -191,7 +240,7 @@ export default function HomeScreen(){
     {/* Location Button */}
     <TouchableOpacity
       style={styles.locationBtn}
-      onPress={handleGetLocation}
+      onPress={startLiveTracking}
     >
       <Text style={styles.btnText}>
         Get Current Location

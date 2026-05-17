@@ -1,18 +1,18 @@
-import React, { useEffect, useState } from "react";
+import React, { use, useEffect, useContext,useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import MapScreen from "./MapScreen";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getUserLocation } from "../utils/location";
 import { supabase } from "../services/supabase";
+import { AlertsContext } from "../context/AlertsContext";
 
 export default function MapPage() {
   const [location, setLocation] = useState(null);
-  const [alerts, setAlerts] = useState([]);
+  const { alerts,} = useContext(AlertsContext);
 
   useEffect(() => {
     loadLocation();
-    loadAlerts();
-    listenForAlerts();
+
   }, []);
 
   const loadLocation = async () => {
@@ -20,36 +20,36 @@ export default function MapPage() {
     setLocation(coords);
   };
 
-  const loadAlerts = async () => {
-    const { data, error } = await supabase
-      .from("sos_alerts")
-      .select("*")
-      .order("created_at", {
-        ascending: false,
-      });
+  // const loadAlerts = async () => {
+  //   const { data, error } = await supabase
+  //     .from("sos_alerts")
+  //     .select("*")
+  //     .order("created_at", {
+  //       ascending: false,
+  //     });
       
-    if(!error) setAlerts(data);
-  };
+  //   // if(!error) setAlerts(data);*
+  // };
 
 
-  const listenForAlerts = () => {
-    supabase
-      .channel("live_map")
-      .on(
-        "postgres_changes",{
-          event: "INSERT",
-          schema: "public",
-          table: "sos_alerts",
-        },
-        (payload) => {
-          setAlerts((prev) => [
-            payload.new,
-            ...prev,
-          ]);
-        }
-      )
-      .subscribe();
-  };
+  // const listenForAlerts = () => {
+  //   supabase
+  //     .channel("live_map")
+  //     .on(
+  //       "postgres_changes",{
+  //         event: "INSERT",
+  //         schema: "public",
+  //         table: "sos_alerts",
+  //       },
+  //       (payload) => {
+  //         setAlerts((prev) => [
+  //           payload.new,
+  //           ...prev,
+  //         ]);
+  //       }
+  //     )
+  //     .subscribe();
+  // };
 
   return (
     <SafeAreaView style={styles.container}>

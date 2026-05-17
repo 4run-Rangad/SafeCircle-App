@@ -82,6 +82,9 @@ export default function SOSButton({ location }){
                 user_id: user.id,
                 latitude: location.latitude,
                 longitude: location.longitude,
+                created_at: new Date().toISOString(),
+                type: "Emergency",
+                sender: user.email,
             },
         ]);
 
