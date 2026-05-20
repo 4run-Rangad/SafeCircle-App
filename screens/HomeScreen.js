@@ -229,7 +229,7 @@ export default function HomeScreen(){
       <Text style={styles.statusText}>
         {alerts.length > 0
           ? "⚠️ Alerts Nearby"
-          : "✅ You are Safe"}
+          : "🟢 You are Safe"}
       </Text>
 
       <Text style={styles.subText}>

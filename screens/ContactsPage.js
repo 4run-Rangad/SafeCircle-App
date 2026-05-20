@@ -74,7 +74,7 @@ export default function ContactsPage() {
 
               {selected && (
                 <Text style={styles.tick}>
-                  ✓ Selected
+                   Selected
                 </Text>
               )}
             </TouchableOpacity>
