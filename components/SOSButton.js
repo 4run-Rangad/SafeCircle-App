@@ -1,187 +1,460 @@
-import { TouchableOpacity, Text, StyleSheet, Alert } from "react-native";
-import React, {useEffect} from "react";
+import {
+  TouchableOpacity,
+  Text,
+  StyleSheet,
+  Alert,
+} from "react-native";
+
+import React, {
+  useEffect,
+  useRef,
+} from "react";
+
 import * as SMS from "expo-sms";
-import { getUserLocation } from "../utils/location";
-import { supabase } from "../services/supabase";
-import { getDistance } from "../utils/distance";
-import * as Notifications from "expo-notifications";
 
-export default function SOSButton({ location }){
-    useEffect(() => {
-          const subscription = Notifications.addNotificationResponseReceivedListener(
-            (response) => {
-              const action = response.actionIdentifier;
-              if (action === "SEND_SOS") {
-                Alert.alert(
-                  "🚨 SOS Activated",
-                  "Emergency alert sent"
-                );
-    
-                handleSOS();
-              }
-            }
-          );
-    
-          return () => subscription.remove();
-    }, []);
+import {
+  getUserLocation,
+} from "../utils/location";
 
-    //Push Notification
-    const sendPush = async (users) => {
-        const messages = users.filter((u) => u.expo_token)
-        .map((u) => ({
-            to: u.expo_token,
-            sound: "default",
-            title: "Nearby SOS alert",
-            body: "Someone nearby needs Help!",
-            priority: "high",
-            data: {
-                type: "sos",
-            },
-        }));
+import {
+  supabase,
+} from "../services/supabase";
 
-        console.log("Sending:", messages);
-        
+import {
+  getDistance,
+} from "../utils/distance";
 
-        //if(messages.length === 0) return;
+import * as Notifications
+from "expo-notifications";
 
-        const response = await fetch(
-            "https://exp.host/--/api/v2/push/send",
-            {
-                method: "POST",
-                headers: {
-                    Accept: "application/json",
-                    "Accept-Encoding": "gzip, deflate",
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(messages),
-            }
-        );
-        const data = await response.json();
-        console.log("Expo response:", JSON.stringify(data));
-        //JSON.stringify(data, null, 2);
-        
-    };
+export default function SOSButton({
+  location,
+}) {
 
-    const handleSOS = async () =>{
+  // TRACK ACTIVE INTERVAL
 
-        if (!location) {
-            Alert.alert("Error", "Get loc first");
-            return;
-        }
+  const trackingInterval =
+    useRef(null);
 
-        //Get user
-        const { data: { user } } = await supabase.auth.getUser();
+  useEffect(() => {
 
-        if (!user) {
-            Alert.alert("Error", "User not logged in");
-            return;
-        }
-        //Save SOS To DB
-        const { error } = await supabase.from("sos_alerts").insert([
-            {
-                user_id: user.id,
-                latitude: location.latitude,
-                longitude: location.longitude,
-                created_at: new Date().toISOString(),
-                type: "Emergency",
-                sender: user.email,
-            },
-        ]);
+    const subscription =
+      Notifications
+      .addNotificationResponseReceivedListener(
 
-        if (error) {
-            console.log("SOS error:",error);
-            Alert.alert("Error snding SOS");
-            return;
-        }
+        (response) => {
 
-        //Alert.alert("SOS sent to network!");
-        console.log("sos inserted");
+          const action =
+            response.actionIdentifier;
 
-        //Get all other users
-        const { data: users, err } = await supabase.from("users").select("*").neq("id", user.id);
-        console.log("Fetched users:", JSON.stringify(users, null, 2));
-        console.log("Error:", err);
-        
-        
+          if (
+            action === "SEND_SOS"
+          ) {
 
-        //Nearby Only
-        const nearbyUsers = users.filter((u) => {
-            console.log("Checking user:", u.id);
-            console.log("Lat:", u.latitude, "Lon:", u.longitude);
-            
-            if(!u.latitude || !u.longitude) return false;
-
-            const distance = getDistance(
-                Number(location.latitude),
-                Number(location.longitude),
-                Number(u.latitude),
-                Number(u.longitude)
+            Alert.alert(
+              "🚨 SOS Activated",
+              "Emergency alert sent"
             );
 
-            console.log("Distance:", distance);
-            
-            console.log("no. of users nearby" , nearbyUsers);
-            
-            return distance <= 5;
-        });
+            handleSOS();
+          }
+        }
+      );
 
-        await sendPush(nearbyUsers);
-        Alert.alert("SOS sent", `${nearbyUsers.length} nearby users notified`);
+    return () => {
 
-    
+      subscription.remove();
 
-        // if(!selectedNumbers || selectedNumbers.length === 0){
-        //     Alert.alert("No contacts", "Please select atleast one contact");
-        //     return;
-        // }
+      // CLEAR INTERVAL
 
-//         const coords = await getUserLocation();
-        
-//         if (!coords){
-//             Alert.alert("Error", "Unable to fetch Location");
-//             return;
-//         }
+      if (
+        trackingInterval.current
+      ) {
 
-//         const message = `SOS! Help needed.
-// My Location: 
-// https://maps.google.com/?q=${coords.latitude},${coords.longitude}`;
-
-
-//         const isAvailabe = await SMS.isAvailableAsync();
-
-//         if(!isAvailabe){
-//             Alert.alert("Error","SMS not supported on this device");
-//             return;
-//         }
-
-//         await SMS.sendSMSAsync(selectedNumbers, message);
-//         Alert.alert(
-//             "Success", "SOS sent successfully");
+        clearInterval(
+          trackingInterval.current
+        );
+      }
     };
 
-    return (
-        <TouchableOpacity 
-        style={styles.button}
-        onPress={handleSOS}>
-            <Text style={styles.text}>SOS</Text>
-        </TouchableOpacity>
-    );
+  }, []);
+
+  // PUSH NOTIFICATIONS
+
+  const sendPush =
+    async (users) => {
+
+      const messages =
+        users
+        .filter(
+          (u) => u.expo_token
+        )
+
+        .map((u) => ({
+
+          to: u.expo_token,
+
+          sound: "default",
+
+          title:
+            "Nearby SOS Alert",
+
+          body:
+            "Someone nearby needs help!",
+
+          priority: "high",
+
+          data: {
+            type: "sos",
+          },
+
+        }));
+
+      if (
+        messages.length === 0
+      ) return;
+
+      try {
+
+        const response =
+          await fetch(
+
+            "https://exp.host/--/api/v2/push/send",
+
+            {
+              method:"POST",
+
+              headers:{
+                Accept:"application/json",
+
+                "Accept-Encoding":
+                  "gzip, deflate",
+
+                "Content-Type":
+                  "application/json",
+              },
+
+              body: JSON.stringify(
+                messages
+              ),
+            }
+          );
+
+        const data =
+          await response.json();
+
+        console.log(
+          "Push response:",
+          data
+        );
+
+      } catch (err) {
+
+        console.log(
+          "Push error:",
+          err
+        );
+      }
+    };
+
+  // HANDLE SOS
+
+  const handleSOS =
+    async () => {
+
+      if (!location) {
+
+        Alert.alert(
+          "Error",
+          "Get location first"
+        );
+
+        return;
+      }
+
+      // GET USER
+
+      const {
+        data:{ user },
+      }
+
+      = await supabase
+      .auth.getUser();
+
+      if (!user) {
+
+        Alert.alert(
+          "Error",
+          "User not logged in"
+        );
+
+        return;
+      }
+
+      // CHECK EXISTING SOS
+
+      const {
+        data: existingSOS,
+      }
+
+      = await supabase
+
+      .from("sos_alerts")
+
+      .select("*")
+
+      .eq("user_id", user.id)
+
+      .eq("is_active", true)
+
+      .maybeSingle();
+
+      // UPDATE EXISTING SOS
+
+      if (existingSOS) {
+
+        await supabase
+
+        .from("sos_alerts")
+
+        .update({
+
+          latitude:
+            location.latitude,
+
+          longitude:
+            location.longitude,
+
+          updated_at:
+            new Date()
+            .toISOString(),
+
+        })
+
+        .eq(
+          "id",
+          existingSOS.id
+        );
+
+        console.log(
+          "SOS updated"
+        );
+
+      } else {
+
+        // CREATE NEW SOS
+
+        await supabase
+
+        .from("sos_alerts")
+
+        .insert([{
+
+          user_id: user.id,
+
+          latitude:
+            location.latitude,
+
+          longitude:
+            location.longitude,
+
+          created_at:
+            new Date()
+            .toISOString(),
+
+          updated_at:
+            new Date()
+            .toISOString(),
+
+          is_active:true,
+
+          type:"Emergency",
+
+          sender:user.email,
+
+        }]);
+
+        console.log(
+          "SOS created"
+        );
+      }
+
+      // CLEAR OLD INTERVAL
+
+      if (
+        trackingInterval.current
+      ) {
+
+        clearInterval(
+          trackingInterval.current
+        );
+      }
+
+      // LIVE LOCATION TRACKING
+
+      trackingInterval.current =
+        setInterval(
+          async () => {
+
+            try {
+
+              const coords =
+                await getUserLocation();
+
+              if (!coords) return;
+
+              await supabase
+
+              .from("sos_alerts")
+
+              .update({
+
+                latitude:
+                  coords.latitude,
+
+                longitude:
+                  coords.longitude,
+
+                updated_at:
+                  new Date()
+                  .toISOString(),
+
+              })
+
+              .eq(
+                "user_id",
+                user.id
+              )
+
+              .eq(
+                "is_active",
+                true
+              );
+
+              console.log(
+                "Live SOS updated"
+              );
+
+            } catch (err) {
+
+              console.log(
+                "Tracking error:",
+                err
+              );
+            }
+
+          },
+
+          5000
+        );
+
+      // GET USERS
+
+      const {
+        data: users,
+      }
+
+      = await supabase
+
+      .from("users")
+
+      .select("*")
+
+      .neq("id", user.id);
+
+      // FILTER NEARBY USERS
+
+      const nearbyUsers =
+        users.filter((u) => {
+
+          if (
+            !u.latitude ||
+            !u.longitude
+          ) return false;
+
+          const distance =
+            getDistance(
+
+              Number(
+                location.latitude
+              ),
+
+              Number(
+                location.longitude
+              ),
+
+              Number(
+                u.latitude
+              ),
+
+              Number(
+                u.longitude
+              )
+            );
+
+          return distance <= 5;
+        });
+
+      // SEND PUSH
+
+      await sendPush(
+        nearbyUsers
+      );
+
+      Alert.alert(
+
+        "SOS Sent",
+
+        `${nearbyUsers.length}
+        nearby users notified`
+      );
+    };
+
+  return (
+
+    <TouchableOpacity
+
+      style={styles.button}
+
+      onPress={handleSOS}
+    >
+
+      <Text style={styles.text}>
+        SOS
+      </Text>
+
+    </TouchableOpacity>
+  );
 }
 
-const styles = StyleSheet.create({
+const styles =
+  StyleSheet.create({
+
     button: {
-        width: 180,
-        height: 180,
-        borderRadius: 90,
-        backgroundColor: "#ff3b30",
-        justifyContent: "center",
-        alignItems: "center",
-        elevation: 20,
-        alignSelf: "center",
+
+      width:180,
+
+      height:180,
+
+      borderRadius:90,
+
+      backgroundColor:"#ff3b30",
+
+      justifyContent:"center",
+
+      alignItems:"center",
+
+      elevation:20,
+
+      alignSelf:"center",
     },
+
     text: {
-        color: "white",
-        fontSize: 40,
-        fontWeight: "bold",
+
+      color:"white",
+
+      fontSize:40,
+
+      fontWeight:"bold",
     },
 });

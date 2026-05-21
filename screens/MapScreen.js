@@ -1,5 +1,8 @@
 import React, {
   useContext,
+  useMemo,
+  useRef,
+  useEffect,
 } from "react";
 
 import {
@@ -22,9 +25,13 @@ export default function MapScreen() {
     location,
   } = useContext(AlertsContext);
 
+  const webViewRef =
+    useRef(null);
+
   if (!location) {
 
     return (
+
       <View style={styles.center}>
 
         <Text style={styles.text}>
@@ -35,99 +42,54 @@ export default function MapScreen() {
     );
   }
 
-  //SOS markers
+  // SEND ALERTS TO WEBVIEW
 
-  const markersJS =
-    alerts.map((item, index) => {
+  useEffect(() => {
 
-      return `
+    if (
+      !webViewRef.current
+    ) return;
 
-        const sosIcon${index} =
-          L.divIcon({
+    const alertsData =
+      JSON.stringify(alerts);
 
-            html: \`
-              <div
-                style="
-                  width:20px;
-                  height:20px;
-                  background:red;
-                  border-radius:50%;
-                  border:3px solid white;
-                  box-shadow:0 0 15px red;
-                  animation:pulse 1s infinite;
-                "
-              ></div>
-            \`,
+    webViewRef.current
+      .injectJavaScript(`
 
-            className: "",
-            iconSize: [18,18]
-
-          });
-
-        const victimMarker${index} =
-          L.marker(
-            [
-              ${Number(item.latitude)},
-              ${Number(item.longitude)}
-            ],
-            {
-              icon: sosIcon${index}
-            }
-          )
-
-          .addTo(map)
-
-          .bindPopup(\`
-
-            <div
-              style="
-                min-width:180px;
-                color:black;
-                font-family:sans-serif;
-              "
-            >
-
-              <h3>🚨 SOS ALERT</h3>
-
-              <p>
-                <b>User:</b>
-                ${item.sender || "Unknown"}
-              </p>
-
-              <p>
-                <b>Distance:</b>
-                ${item.distance || "Nearby"} km
-              </p>
-
-              <p>
-                <b>Type:</b>
-                ${item.type || "Emergency"}
-              </p>
-
-            </div>
-
-          \`);
-
-        victimMarker${index}.on(
-          "click",
-          function () {
-
-            activeVictimLat =
-              ${Number(item.latitude)};
-
-            activeVictimLng =
-              ${Number(item.longitude)};
-
-            startLiveRoute();
-
-          }
+        updateSOSMarkers(
+          ${alertsData}
         );
 
-      `;
+        true;
+      `);
 
-    }).join("");
+  }, [alerts]);
 
-  const html = `
+  // SEND LIVE USER LOCATION
+
+  useEffect(() => {
+
+    if (
+      !webViewRef.current ||
+      !location
+    ) return;
+
+    webViewRef.current
+      .injectJavaScript(`
+
+        updateUserLocation(
+          ${location.latitude},
+          ${location.longitude}
+        );
+
+        true;
+      `);
+
+  }, [location]);
+
+  // HTML
+
+  const html = useMemo(() => `
 
     <!DOCTYPE html>
 
@@ -202,14 +164,22 @@ https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js
 
       <script>
 
+        // MAP
+
         const map =
-          L.map("map").setView(
+
+          L.map("map")
+          .setView(
+
             [
               ${location.latitude},
               ${location.longitude}
             ],
+
             14
           );
+
+        // TILE
 
         L.tileLayer(
 
@@ -222,12 +192,30 @@ https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js
 
         ).addTo(map);
 
+        // STORAGE
+
+        window.sosMarkers = {};
+
+        let routingControl = null;
+
+        let activeVictimId = null;
+
+        let activeVictimLat = null;
+        let activeVictimLng = null;
+
+        let currentUserLat =
+          ${location.latitude};
+
+        let currentUserLng =
+          ${location.longitude};
+
         // USER ICON
 
         const userIcon =
+
           L.divIcon({
 
-            html: \`
+            html:\`
               <div
                 style="
                   width:20px;
@@ -240,17 +228,21 @@ https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js
               ></div>
             \`,
 
-            className: "",
-            iconSize:[20,20]
-
+            className:"",
+            iconSize:[20,20],
           });
 
+        // USER MARKER
+
         const userMarker =
+
           L.marker(
+
             [
-              ${location.latitude},
-              ${location.longitude}
+              currentUserLat,
+              currentUserLng
             ],
+
             {
               icon:userIcon
             }
@@ -262,12 +254,13 @@ https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js
             "📍 You are here"
           );
 
-        // SAFE RADIUS
+          //SAFE RADIUS
+           // SAFE RADIUS
 
         L.circle(
           [
-            ${location.latitude},
-            ${location.longitude}
+            currentUserLat,
+            currentUserLng
           ],
           {
             color:"#00bfff",
@@ -277,14 +270,32 @@ https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js
           }
         ).addTo(map);
 
-        // ROUTING
+        // USER LOCATION UPDATE
 
-        let routingControl = null;
+        function updateUserLocation(
+          lat,
+          lng
+        ) {
 
-        let routeInterval = null;
+          currentUserLat = lat;
+          currentUserLng = lng;
 
-        let activeVictimLat = null;
-        let activeVictimLng = null;
+          userMarker.setLatLng([
+            lat,
+            lng
+          ]);
+
+          // UPDATE ROUTE
+
+          if (
+            activeVictimId
+          ) {
+
+            drawRoute();
+          }
+        }
+
+        // ROUTE
 
         function drawRoute() {
 
@@ -293,20 +304,30 @@ https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js
             activeVictimLng === null
           ) return;
 
+          // REMOVE OLD
+
           if (routingControl) {
-            map.removeControl(
-              routingControl
-            );
+
+            try {
+
+              map.removeControl(
+                routingControl
+              );
+
+            } catch(e){}
           }
 
+          // NEW ROUTE
+
           routingControl =
+
             L.Routing.control({
 
-              waypoints: [
+              waypoints:[
 
                 L.latLng(
-                  ${location.latitude},
-                  ${location.longitude}
+                  currentUserLat,
+                  currentUserLng
                 ),
 
                 L.latLng(
@@ -316,9 +337,17 @@ https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js
               ],
 
               routeWhileDragging:false,
+
               addWaypoints:false,
+
               draggableWaypoints:false,
+
+              fitSelectedRoutes:true,
+
               show:false,
+
+              createMarker:
+                () => null,
 
               lineOptions:{
                 styles:[
@@ -332,40 +361,198 @@ https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js
             }).addTo(map);
         }
 
-        function startLiveRoute() {
+        // ALERT MARKERS
 
-          drawRoute();
+        function updateSOSMarkers(
+          alerts
+        ) {
 
-          if (routeInterval) {
-            clearInterval(
-              routeInterval
+          const activeIds = [];
+
+          alerts.forEach((item) => {
+
+            const markerId =
+              item.user_id;
+
+            activeIds.push(
+              markerId
             );
-          }
 
-          routeInterval =
-            setInterval(() => {
+            const lat =
+              Number(item.latitude);
 
-              drawRoute();
+            const lng =
+              Number(item.longitude);
 
-            }, 5000);
+            // EXISTING MARKER
+
+            if (
+              window.sosMarkers[
+                markerId
+              ]
+            ) {
+
+              window.sosMarkers[
+                markerId
+              ].setLatLng([
+                lat,
+                lng
+              ]);
+
+              // LIVE ROUTE UPDATE
+
+              if (
+                activeVictimId ===
+                markerId
+              ) {
+
+                activeVictimLat =
+                  lat;
+
+                activeVictimLng =
+                  lng;
+
+                drawRoute();
+              }
+
+            } else {
+
+              // SOS ICON
+
+              const sosIcon =
+
+                L.divIcon({
+
+                  html:\`
+                    <div
+                      style="
+                        width:20px;
+                        height:20px;
+                        background:red;
+                        border-radius:50%;
+                        border:3px solid white;
+                        box-shadow:0 0 15px red;
+                        animation:pulse 1s infinite;
+                      "
+                    ></div>
+                  \`,
+
+                  className:"",
+                  iconSize:[20,20],
+                });
+
+              // CREATE MARKER
+
+              const marker =
+
+                L.marker(
+                  [lat, lng],
+                  {
+                    icon:sosIcon
+                  }
+                )
+
+                .addTo(map)
+
+                .bindPopup(\`
+
+                  <div
+                    style="
+                      min-width:180px;
+                      color:black;
+                      font-family:sans-serif;
+                    "
+                  >
+
+                    <h3>
+                      🚨 SOS ALERT
+                    </h3>
+
+                    <p>
+                      <b>User:</b>
+                      ${"${item.sender || 'Unknown'}"}
+                    </p>
+
+                    <p>
+                      <b>Distance:</b>
+                      ${"${item.distance || 'Nearby'}"} km
+                    </p>
+
+                  </div>
+
+                \`);
+
+              // CLICK ROUTE
+
+              marker.on(
+                "click",
+                function () {
+
+                  activeVictimId =
+                    markerId;
+
+                  activeVictimLat =
+                    lat;
+
+                  activeVictimLng =
+                    lng;
+
+                  drawRoute();
+                }
+              );
+
+              // SAVE
+
+              window.sosMarkers[
+                markerId
+              ] = marker;
+
+              // AUTO FOCUS
+
+              map.flyTo(
+                [lat, lng],
+                16,
+                {
+                  animate:true,
+                  duration:2,
+                }
+              );
+            }
+          });
+
+          // REMOVE OLD MARKERS
+
+          Object.keys(
+            window.sosMarkers
+          ).forEach((id) => {
+
+            if (
+              !activeIds.includes(id)
+            ) {
+
+              map.removeLayer(
+                window.sosMarkers[id]
+              );
+
+              delete window.sosMarkers[id];
+            }
+          });
         }
-
-        // SOS MARKERS
-
-        ${markersJS}
 
       </script>
 
     </body>
 
     </html>
-  `;
+
+  `, []);
 
   return (
 
     <View style={styles.container}>
 
       <WebView
+        ref={webViewRef}
         originWhitelist={["*"]}
         source={{ html }}
         style={styles.map}
@@ -375,27 +562,28 @@ https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js
   );
 }
 
-const styles = StyleSheet.create({
+const styles =
+  StyleSheet.create({
 
-  container: {
-    flex:1,
-    backgroundColor:"black",
-  },
+    container:{
+      flex:1,
+      backgroundColor:"black",
+    },
 
-  map: {
-    flex:1,
-  },
+    map:{
+      flex:1,
+    },
 
-  center: {
-    flex:1,
-    justifyContent:"center",
-    alignItems:"center",
-    backgroundColor:"black",
-  },
+    center:{
+      flex:1,
+      justifyContent:"center",
+      alignItems:"center",
+      backgroundColor:"black",
+    },
 
-  text: {
-    color:"white",
-    fontSize:18,
-  },
+    text:{
+      color:"white",
+      fontSize:18,
+    },
 
 });

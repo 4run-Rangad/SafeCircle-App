@@ -4,6 +4,8 @@ import React, {
   useState,
 } from "react";
 
+import * as Location from "expo-location";
+
 import { Alert } from "react-native";
 
 import { supabase } from "../services/supabase";
@@ -27,6 +29,68 @@ export const AlertsProvider = ({
     setCurrentUser] =
     useState(null);
 
+  //Live Location Tracking
+  useEffect(() => {
+
+    let subscription;
+
+    const startTracking =
+      async () => {
+
+        const { status } =
+
+          await Location
+            .requestForegroundPermissionsAsync();
+
+        if (
+          status !== "granted"
+        ) {
+          return;
+        }
+
+        subscription =
+
+          await Location
+            .watchPositionAsync(
+
+              {
+                accuracy:
+                  Location
+                    .Accuracy.High,
+
+                timeInterval: 3000,
+
+                distanceInterval: 5,
+              },
+
+              (loc) => {
+
+                const coords =
+                  loc.coords;
+
+                setLocation({
+
+                  latitude:
+                    coords.latitude,
+
+                  longitude:
+                    coords.longitude,
+                });
+              }
+            );
+      };
+
+    startTracking();
+
+    return () => {
+
+      if (subscription) {
+        subscription.remove();
+      }
+    };
+
+  }, []);
+
   // Realtime listener
 
   useEffect(() => {
@@ -39,89 +103,124 @@ export const AlertsProvider = ({
     const channel =
       supabase
 
-      .channel("nearby_sos")
+        .channel("nearby_sos")
 
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "sos_alerts",
-        },
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "sos_alerts",
+          },
 
-        (payload) => {
+          (payload) => {
 
-          const alertData =
-            payload?.new;
+            const alertData =
+              payload?.new;
 
-          if (!alertData)
-            return;
+            if (!alertData)
+              return;
 
-          // Ignore own SOS
+            //Only active alerts
+            if (!alertData) return;
 
-          if (
-            alertData.user_id ===
-            currentUser.id
-          ) {
-            return;
-          }
+            // Ignore own SOS
 
-          // Distance filter
+            if (
+              alertData.user_id ===
+              currentUser.id
+            ) {
+              return;
+            }
 
-          const distance =
-            getDistance(
-              location.latitude,
-              location.longitude,
+            if (!alertData.is_active) {
 
-              alertData.latitude,
-              alertData.longitude
+              setAlerts((prev) =>
+
+                prev.filter(
+
+                  (item) =>
+
+                    item.user_id !==
+                    alertData.user_id
+                )
+              );
+
+              return;
+            }
+
+            // Distance filter
+
+            const distance =
+              getDistance(
+                location.latitude,
+                location.longitude,
+
+                alertData.latitude,
+                alertData.longitude
+              );
+
+            console.log(
+              "SOS Distance:",
+              distance
             );
 
-          console.log(
-            "SOS Distance:",
-            distance
-          );
+            // Only nearby alerts
 
-          // Only nearby alerts
+            if (distance <= 5) {
 
-          if (distance <= 5) {
+              setAlerts((prev) => {
 
-            setAlerts((prev) => {
+                const exists =
+                  prev.find(
+                    (item) =>
+                      item.user_id ===
+                      alertData.user_id
+                  );
 
-              const exists =
-                prev.find(
-                  (item) =>
-                    item.id ===
-                    alertData.id
+
+
+                if (exists) {
+                  return prev.map((item) => {
+                    if (item.user_id ===
+                      alertData.user_id) {
+                      return {
+                        ...item,
+                        ...alertData,
+                        distance:
+                          distance.toFixed(2),
+                        receivedAt: Date.now(),
+                      };
+                    }
+                    return item;
+                  });
+                }
+
+                Alert.alert(
+                  "New Nearby SOS Alert",
+                  `${distance.toFixed(2)} km away`
                 );
 
-              if (exists) {
-                return prev;
-              }
+                return [
+                  {
+                    ...alertData,
 
-              return [
-                {
-                  ...alertData,
+                    distance:
+                      distance.toFixed(2),
 
-                  distance:
-                    distance.toFixed(2),
-                  
-                  receivedAt: Date.now(),
-                },
+                    receivedAt: Date.now(),
+                  },
 
-                ...prev,
-              ];
-            });
+                  ...prev,
+                ];
+              });
 
-            Alert.alert(
-              "Nearby SOS Alert",
-              `${distance.toFixed(2)} km away`
-            );
+
+            }
           }
-        }
-      )
+        )
 
-      .subscribe();
+        .subscribe();
 
     return () => {
       supabase.removeChannel(
