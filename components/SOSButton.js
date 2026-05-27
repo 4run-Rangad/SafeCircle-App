@@ -11,6 +11,7 @@ import React, {
 } from "react";
 
 import * as SMS from "expo-sms";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
   getUserLocation,
@@ -25,7 +26,7 @@ import {
 } from "../utils/distance";
 
 import * as Notifications
-from "expo-notifications";
+  from "expo-notifications";
 
 export default function SOSButton({
   location,
@@ -36,30 +37,31 @@ export default function SOSButton({
   const trackingInterval =
     useRef(null);
 
+  //Persistent Notification
   useEffect(() => {
 
     const subscription =
       Notifications
-      .addNotificationResponseReceivedListener(
+        .addNotificationResponseReceivedListener(
 
-        (response) => {
+          (response) => {
 
-          const action =
-            response.actionIdentifier;
+            const action =
+              response.actionIdentifier;
 
-          if (
-            action === "SEND_SOS"
-          ) {
+            if (
+              action === "SEND_SOS"
+            ) {
 
-            Alert.alert(
-              "🚨 SOS Activated",
-              "Emergency alert sent"
-            );
+              Alert.alert(
+                "🚨 SOS Activated",
+                "Emergency alert sent"
+              );
 
-            handleSOS();
+              handleSOS();
+            }
           }
-        }
-      );
+        );
 
     return () => {
 
@@ -79,6 +81,70 @@ export default function SOSButton({
 
   }, []);
 
+  //SMS to Contacts
+  const sendEmergencySMS = async () => {
+
+    try {
+
+      const savedContacts =
+        await AsyncStorage.getItem(
+          "emergency_contacts"
+        );
+
+      if (!savedContacts) {
+
+        Alert.alert(
+          "No Contacts",
+          "Add emergency contacts first"
+        );
+
+        return;
+      }
+
+      const contacts =
+        JSON.parse(savedContacts);
+
+      const phoneNumbers =
+        contacts.map(
+          (c) => c.phone
+        );
+
+      const message = `🚨 EMERGENCY SOS ALERT
+
+I need help immediately.
+
+My live location:
+https://maps.google.com/?q=${location.latitude},${location.longitude}
+
+Sent from SafeCircle`;
+
+      const available =
+        await SMS.isAvailableAsync();
+
+      if (!available) {
+
+        Alert.alert(
+          "SMS not supported"
+        );
+
+        return;
+      }
+
+      await SMS.sendSMSAsync(
+        phoneNumbers,
+        message
+      );
+
+    } catch (err) {
+
+      console.log(err);
+
+      Alert.alert(
+        "SMS Error"
+      );
+    }
+  };
+
   // PUSH NOTIFICATIONS
 
   const sendPush =
@@ -86,29 +152,29 @@ export default function SOSButton({
 
       const messages =
         users
-        .filter(
-          (u) => u.expo_token
-        )
+          .filter(
+            (u) => u.expo_token
+          )
 
-        .map((u) => ({
+          .map((u) => ({
 
-          to: u.expo_token,
+            to: u.expo_token,
 
-          sound: "default",
+            sound: "default",
 
-          title:
-            "Nearby SOS Alert",
+            title:
+              "Nearby SOS Alert",
 
-          body:
-            "Someone nearby needs help!",
+            body:
+              "Someone nearby needs help!",
 
-          priority: "high",
+            priority: "high",
 
-          data: {
-            type: "sos",
-          },
+            data: {
+              type: "sos",
+            },
 
-        }));
+          }));
 
       if (
         messages.length === 0
@@ -122,10 +188,10 @@ export default function SOSButton({
             "https://exp.host/--/api/v2/push/send",
 
             {
-              method:"POST",
+              method: "POST",
 
-              headers:{
-                Accept:"application/json",
+              headers: {
+                Accept: "application/json",
 
                 "Accept-Encoding":
                   "gzip, deflate",
@@ -175,11 +241,11 @@ export default function SOSButton({
       // GET USER
 
       const {
-        data:{ user },
+        data: { user },
       }
 
-      = await supabase
-      .auth.getUser();
+        = await supabase
+          .auth.getUser();
 
       if (!user) {
 
@@ -197,17 +263,17 @@ export default function SOSButton({
         data: existingSOS,
       }
 
-      = await supabase
+        = await supabase
 
-      .from("sos_alerts")
+          .from("sos_alerts")
 
-      .select("*")
+          .select("*")
 
-      .eq("user_id", user.id)
+          .eq("user_id", user.id)
 
-      .eq("is_active", true)
+          .eq("is_active", true)
 
-      .maybeSingle();
+          .maybeSingle();
 
       // UPDATE EXISTING SOS
 
@@ -215,26 +281,26 @@ export default function SOSButton({
 
         await supabase
 
-        .from("sos_alerts")
+          .from("sos_alerts")
 
-        .update({
+          .update({
 
-          latitude:
-            location.latitude,
+            latitude:
+              location.latitude,
 
-          longitude:
-            location.longitude,
+            longitude:
+              location.longitude,
 
-          updated_at:
-            new Date()
-            .toISOString(),
+            updated_at:
+              new Date()
+                .toISOString(),
 
-        })
+          })
 
-        .eq(
-          "id",
-          existingSOS.id
-        );
+          .eq(
+            "id",
+            existingSOS.id
+          );
 
         console.log(
           "SOS updated"
@@ -246,33 +312,33 @@ export default function SOSButton({
 
         await supabase
 
-        .from("sos_alerts")
+          .from("sos_alerts")
 
-        .insert([{
+          .insert([{
 
-          user_id: user.id,
+            user_id: user.id,
 
-          latitude:
-            location.latitude,
+            latitude:
+              location.latitude,
 
-          longitude:
-            location.longitude,
+            longitude:
+              location.longitude,
 
-          created_at:
-            new Date()
-            .toISOString(),
+            created_at:
+              new Date()
+                .toISOString(),
 
-          updated_at:
-            new Date()
-            .toISOString(),
+            updated_at:
+              new Date()
+                .toISOString(),
 
-          is_active:true,
+            is_active: true,
 
-          type:"Emergency",
+            type: "Emergency",
 
-          sender:user.email,
+            sender: user.email,
 
-        }]);
+          }]);
 
         console.log(
           "SOS created"
@@ -305,31 +371,31 @@ export default function SOSButton({
 
               await supabase
 
-              .from("sos_alerts")
+                .from("sos_alerts")
 
-              .update({
+                .update({
 
-                latitude:
-                  coords.latitude,
+                  latitude:
+                    coords.latitude,
 
-                longitude:
-                  coords.longitude,
+                  longitude:
+                    coords.longitude,
 
-                updated_at:
-                  new Date()
-                  .toISOString(),
+                  updated_at:
+                    new Date()
+                      .toISOString(),
 
-              })
+                })
 
-              .eq(
-                "user_id",
-                user.id
-              )
+                .eq(
+                  "user_id",
+                  user.id
+                )
 
-              .eq(
-                "is_active",
-                true
-              );
+                .eq(
+                  "is_active",
+                  true
+                );
 
               console.log(
                 "Live SOS updated"
@@ -354,13 +420,13 @@ export default function SOSButton({
         data: users,
       }
 
-      = await supabase
+        = await supabase
 
-      .from("users")
+          .from("users")
 
-      .select("*")
+          .select("*")
 
-      .neq("id", user.id);
+          .neq("id", user.id);
 
       // FILTER NEARBY USERS
 
@@ -404,10 +470,11 @@ export default function SOSButton({
       Alert.alert(
 
         "SOS Sent",
-
-        `${nearbyUsers.length}
-        nearby users notified`
+        `${nearbyUsers.length} nearby users notified`
       );
+      // SEND SMS
+
+      await sendEmergencySMS();
     };
 
   return (
@@ -432,29 +499,29 @@ const styles =
 
     button: {
 
-      width:180,
+      width: 180,
 
-      height:180,
+      height: 180,
 
-      borderRadius:90,
+      borderRadius: 90,
 
-      backgroundColor:"#ff3b30",
+      backgroundColor: "#ff3b30",
 
-      justifyContent:"center",
+      justifyContent: "center",
 
-      alignItems:"center",
+      alignItems: "center",
 
-      elevation:20,
+      elevation: 20,
 
-      alignSelf:"center",
+      alignSelf: "center",
     },
 
     text: {
 
-      color:"white",
+      color: "white",
 
-      fontSize:40,
+      fontSize: 40,
 
-      fontWeight:"bold",
+      fontWeight: "bold",
     },
-});
+  });
