@@ -169,8 +169,6 @@ npx expo start
 ---
 
 ## 📸 Demo
-
-Project Screenshots:
 ![Home Screen](screenshots/home.png)
 ![Live Map](screenshots/map.jpeg)
 ![Contacts](screenshots/contact.png)
