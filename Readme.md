@@ -171,15 +171,18 @@ npx expo start
 ## 📸 Demo
 
 Project Screenshots:
-
-```md
+1.Home Screen
 ![Home Screen](screenshots/home.png)
+2.Live Map
 ![Live Map](screenshots/map.png)
+3.Contacts
 ![Contacts](screenshots/contact.png)
+4.SMS 
 ![SMS](screenshots/sms.png)
+5.Login
 ![Login](screenshots/login.png)
+6.Register
 ![Register](screenshots/registerscr.png)
-```
 
 ---
 
